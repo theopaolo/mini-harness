@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun index.ts)",
+      "Bash(curl -s \"https://openrouter.ai/api/v1/auth/key\" -H \"Authorization: Bearer $\\(grep OPEN_ROUTER_API /Users/theogoedert/Documents/Webworks/1-side-quests/mini-harness/.env.local)",
+      "Bash(bun -e \"const d = await Bun.stdin.json\\(\\); console.log\\(JSON.stringify\\(d, null, 2\\)\\)\")",
+      "Bash(bun -e \"const d=await Bun.stdin.json\\(\\); console.log\\('count:', d.data?.length\\); d.data?.slice\\(0,10\\).forEach\\(m => console.log\\(m.id\\)\\)\")",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(bun -e \"const d=await Bun.stdin.json\\(\\); d.models?.forEach\\(m => console.log\\(m.name\\)\\)\")",
+      "Bash(bun run *)"
+    ]
+  }
+}

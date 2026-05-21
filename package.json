@@ -1,0 +1,22 @@
+{
+  "name": "mini-harness",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run index.ts",
+    "debug": "bun run index.ts --debug --step",
+    "benchmark": "bun run src/benchmarks/general.ts",
+    "tool-benchmark": "bun run src/benchmarks/toolCalling.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "parse5": "^8.0.1"
+  }
+}

@@ -1,0 +1,327 @@
+{
+  "generatedAt": "2026-05-20T14:38:28.747Z",
+  "taskCount": 5,
+  "rows": [
+    {
+      "model": "~moonshotai/kimi-latest",
+      "name": "MoonshotAI Kimi Latest",
+      "supportsToolsDeclared": true,
+      "supportsParallelToolsDeclared": true,
+      "supportsReasoningDeclared": true,
+      "validToolCallRate": 1,
+      "correctToolChoiceRate": 1,
+      "validJsonArgsRate": 1,
+      "parallelToolCallRate": 1,
+      "noToolDisciplineRate": 1,
+      "finalizesAfterToolResultRate": 1,
+      "totalScore": 0.9999999999999999,
+      "avgLatencyMs": 11063.306682999999,
+      "tasks": [
+        {
+          "id": "single_run_js",
+          "latencyMs": 34193.435833,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "parallel_run_js",
+          "latencyMs": 3545.252790999999,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js",
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "save_note",
+          "latencyMs": 11063.699583000001,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "save_note"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "no_tool",
+          "latencyMs": 2838.4309159999975,
+          "stopReason": "end_turn",
+          "toolNames": [],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": true,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "final_after_observation",
+          "latencyMs": 3675.714291999997,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": true
+        }
+      ]
+    },
+    {
+      "model": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek: DeepSeek V4 Pro",
+      "supportsToolsDeclared": true,
+      "supportsParallelToolsDeclared": false,
+      "supportsReasoningDeclared": true,
+      "validToolCallRate": 1,
+      "correctToolChoiceRate": 1,
+      "validJsonArgsRate": 1,
+      "parallelToolCallRate": 1,
+      "noToolDisciplineRate": 1,
+      "finalizesAfterToolResultRate": 1,
+      "totalScore": 0.9999999999999999,
+      "avgLatencyMs": 5279.963033400001,
+      "tasks": [
+        {
+          "id": "single_run_js",
+          "latencyMs": 4634.2540420000005,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "parallel_run_js",
+          "latencyMs": 7401.831833000004,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js",
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "save_note",
+          "latencyMs": 4360.743499999997,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "save_note"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "no_tool",
+          "latencyMs": 3451.0198329999985,
+          "stopReason": "end_turn",
+          "toolNames": [],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": true,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "final_after_observation",
+          "latencyMs": 6551.965959000008,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": true
+        }
+      ]
+    },
+    {
+      "model": "moonshotai/kimi-k2.6",
+      "name": "MoonshotAI: Kimi K2.6",
+      "supportsToolsDeclared": true,
+      "supportsParallelToolsDeclared": true,
+      "supportsReasoningDeclared": true,
+      "validToolCallRate": 1,
+      "correctToolChoiceRate": 1,
+      "validJsonArgsRate": 1,
+      "parallelToolCallRate": 1,
+      "noToolDisciplineRate": 1,
+      "finalizesAfterToolResultRate": 1,
+      "totalScore": 0.9999999999999999,
+      "avgLatencyMs": 2421.1024668000027,
+      "tasks": [
+        {
+          "id": "single_run_js",
+          "latencyMs": 2012.5702080000046,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "parallel_run_js",
+          "latencyMs": 3008.9600840000057,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js",
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "save_note",
+          "latencyMs": 3309.9904169999936,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "save_note"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "no_tool",
+          "latencyMs": 1586.3947500000068,
+          "stopReason": "end_turn",
+          "toolNames": [],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": true,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "final_after_observation",
+          "latencyMs": 2187.596875000003,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": true
+        }
+      ]
+    },
+    {
+      "model": "qwen/qwen3-coder-next",
+      "name": "Qwen: Qwen3 Coder Next",
+      "supportsToolsDeclared": true,
+      "supportsParallelToolsDeclared": false,
+      "supportsReasoningDeclared": false,
+      "validToolCallRate": 1,
+      "correctToolChoiceRate": 1,
+      "validJsonArgsRate": 1,
+      "parallelToolCallRate": 1,
+      "noToolDisciplineRate": 1,
+      "finalizesAfterToolResultRate": 1,
+      "totalScore": 0.9999999999999999,
+      "avgLatencyMs": 561.2256500000018,
+      "tasks": [
+        {
+          "id": "single_run_js",
+          "latencyMs": 750.5008749999979,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "parallel_run_js",
+          "latencyMs": 632.9632910000073,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js",
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "save_note",
+          "latencyMs": 543.5897090000071,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "save_note"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "no_tool",
+          "latencyMs": 329.01954199999454,
+          "stopReason": "end_turn",
+          "toolNames": [],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": true,
+          "finalizesAfterToolResult": null
+        },
+        {
+          "id": "final_after_observation",
+          "latencyMs": 550.054833000002,
+          "stopReason": "tool_use",
+          "toolNames": [
+            "run_js"
+          ],
+          "hasExpectedToolCall": true,
+          "hasValidArgs": true,
+          "respectsNoTool": null,
+          "finalizesAfterToolResult": true
+        }
+      ]
+    },
+    {
+      "model": "qwen/qwen-2.5-7b-instruct",
+      "name": "Qwen: Qwen2.5 7B Instruct",
+      "supportsToolsDeclared": true,
+      "supportsParallelToolsDeclared": false,
+      "supportsReasoningDeclared": false,
+      "validToolCallRate": 0,
+      "correctToolChoiceRate": 0,
+      "validJsonArgsRate": 0,
+      "parallelToolCallRate": 0,
+      "noToolDisciplineRate": 0,
+      "finalizesAfterToolResultRate": 0,
+      "totalScore": 0,
+      "avgLatencyMs": 0,
+      "tasks": [],
+      "error": "OpenRouter 400: {\"error\":{\"message\":\"Provider returned error\",\"code\":400,\"metadata\":{\"raw\":\"{\\\"code\\\":400,\\\"msg\\\":\\\"bad request\\\",\\\"request_id\\\":\\\"55012249-fc9a-4faa-a6c6-841a3aa859e0\\\"}\",\"provider_name\":\"AtlasCloud\",\"is_byok\":false}},\"user_id\":\"user_2rDa2ai20sQDEbJpKcBWEGJRybt\"}"
+    }
+  ]
+}
