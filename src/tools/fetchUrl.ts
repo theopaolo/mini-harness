@@ -1,6 +1,7 @@
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
 
 const MAX_FETCH_CHARS = 5000;
+const FETCH_TIMEOUT_MS = 30_000;
 
 type HtmlNode = DefaultTreeAdapterTypes.Node;
 type HtmlElement = DefaultTreeAdapterTypes.Element;
@@ -31,7 +32,14 @@ export async function fetchUrl(url: string): Promise<string> {
     throw new Error("seules les URL http(s) sont autorisées");
   }
 
-  const response = await fetch(parsed);
+  const response = await fetch(parsed, {
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  }).catch((error) => {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new Error(`fetch timeout après ${FETCH_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  });
   const raw = await response.text();
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}: ${truncate(raw, 500)}`);

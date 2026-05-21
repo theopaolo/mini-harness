@@ -5,11 +5,19 @@ import {
   type ModelTurn,
 } from "../llm";
 import { routeModels } from "../routing/modelRouter";
+import {
+  buildSystemPrompt,
+  detectSkill,
+  loadSkillCatalog,
+  logSkillDetection,
+} from "../skills";
 import { executeTool, type ToolCall } from "../tools";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 
 const MAX_TURNS = 15;
 const DEBUG_PREVIEW_CHARS = 1200;
+const MODEL_CALL_TIMEOUT_MS = 120_000;
+const TOOL_CALL_TIMEOUT_MS = 60_000;
 
 type HarnessOptions = {
   model?: string;
@@ -26,13 +34,24 @@ export async function runHarness(
   const maxTurns = options.maxTurns ?? MAX_TURNS;
   const debug = createDebugSession(options);
   const forcedModel = options.model ?? Bun.env.HARNESS_MODEL;
+
+  const userModels = forcedModel ? [] : await listUserModels();
+
   const route = forcedModel
     ? {
         selectedModel: forcedModel,
         modelCandidates: [forcedModel],
         reason: "modèle forcé par option ou HARNESS_MODEL",
       }
-    : await routeModels(mission, await listUserModels());
+    : await routeModels(mission, userModels);
+
+  const catalog = await loadSkillCatalog();
+  const detectionModel = pickDetectionModel(route.modelCandidates);
+  const skill = detectionModel
+    ? await detectSkill(mission, catalog, detectionModel)
+    : null;
+  logSkillDetection(mission, skill);
+  const systemPrompt = buildSystemPrompt(SYSTEM_PROMPT, skill);
   const modelCandidates = route.modelCandidates;
   let modelIndex = 0;
 
@@ -47,23 +66,27 @@ export async function runHarness(
   console.log(`Mission: ${mission}\n`);
 
   const messages: HarnessMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     { role: "user", content: mission },
   ];
   await debug.initial(messages);
 
   for (let turnNumber = 1; turnNumber <= maxTurns; turnNumber++) {
-    await debug.beforeModelCall(
-      turnNumber,
-      modelCandidates[modelIndex] ?? route.selectedModel,
-      messages,
-    );
+    const currentModel = modelCandidates[modelIndex] ?? route.selectedModel;
+    await debug.beforeModelCall(turnNumber, currentModel, messages);
 
+    console.log(
+      `[tour ${turnNumber}] llm → ${currentModel} (${messages.length} msgs)…`,
+    );
+    const llmStart = Date.now();
     const turn = await callModelWithFallback(
       messages,
       modelCandidates,
       modelIndex,
       turnNumber,
+    );
+    console.log(
+      `[tour ${turnNumber}] llm ← ${turn.stop_reason} (${Date.now() - llmStart}ms)`,
     );
     modelIndex = turn.modelIndex;
     messages.push(turn.message);
@@ -77,10 +100,28 @@ export async function runHarness(
         return message;
       }
 
-      for (const toolUse of turn.tool_uses) {
-        await debug.beforeTool(turnNumber, toolUse);
-        const result = await executeTool(toolUse);
-        logTurn(turnNumber, toolUse.name, result);
+      const toolResults = await Promise.all(
+        turn.tool_uses.map(async (toolUse) => {
+          await debug.beforeTool(turnNumber, toolUse);
+          console.log(`[tour ${turnNumber}] tool → ${toolUse.name}…`);
+          const start = Date.now();
+          const result = await withTimeout(
+            executeTool(toolUse),
+            TOOL_CALL_TIMEOUT_MS,
+            `tool ${toolUse.name}`,
+          ).catch(
+            (error) =>
+              `Erreur ${toolUse.name}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          console.log(
+            `[tour ${turnNumber}] tool ← ${toolUse.name} (${Date.now() - start}ms)`,
+          );
+          logTurn(turnNumber, toolUse.name, result);
+          return { toolUse, result };
+        }),
+      );
+
+      for (const { toolUse, result } of toolResults) {
         const toolMessage: HarnessMessage = {
           role: "tool",
           tool_call_id: toolUse.id,
@@ -266,7 +307,11 @@ async function callModelWithFallback(
     if (!model) continue;
 
     try {
-      const turn = await callToolModel(messages, model);
+      const turn = await withTimeout(
+        callToolModel(messages, model),
+        MODEL_CALL_TIMEOUT_MS,
+        `model ${model}`,
+      );
       if (index !== startIndex) {
         logTurn(turnNumber, "model", `Bascule vers ${model}`);
       }
@@ -288,11 +333,37 @@ function logTurn(turnNumber: number, action: string, result: string): void {
   console.log(`[tour ${turnNumber}] ${action} -> ${preview}`);
 }
 
+function pickDetectionModel(candidates: string[]): string | null {
+  const override = Bun.env.HARNESS_SKILL_DETECT_MODEL;
+  if (override) return override;
+  return candidates[0] ?? null;
+}
+
 function isRetryableModelError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return (
     message.includes("No endpoints available") ||
     message.includes("model is not available") ||
-    message.includes("Provider returned error")
+    message.includes("Provider returned error") ||
+    message.includes("timeout:")
   );
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`timeout: ${label} dépassé ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }

@@ -124,6 +124,7 @@ export async function callToolModel(
     content: choice.message.content ?? null,
     tool_calls: choice.message.tool_calls,
   };
+
   const toolUses = normalizeToolCalls(choice.message.tool_calls ?? []);
 
   return {
@@ -140,8 +141,7 @@ export async function benchmarkTextModel(
 
   try {
     const result = await callTextModel(BENCHMARK_PROMPT, modelId);
-    const tokensPerSecond =
-      result.completionTokens / (result.latencyMs / 1000);
+    const tokensPerSecond = result.completionTokens / (result.latencyMs / 1000);
 
     return {
       model: modelId,
@@ -189,37 +189,31 @@ function getCompletionContent(data: ChatCompletionResponse): string {
 function normalizeToolCalls(toolCalls: OpenAiToolCall[]) {
   return toolCalls.map((toolCall) => {
     const rawName = toolCall.function.name;
-    const name = isToolName(rawName) ? rawName : "run_js";
-    const input = parseToolInput(toolCall.function.arguments);
 
     if (!isToolName(rawName)) {
       return {
         id: toolCall.id,
-        name,
+        name: "run_js" as const,
         input: {
           code: `throw new Error(${JSON.stringify(`outil inconnu: ${rawName}`)})`,
         },
       };
     }
 
+    let input: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        input = parsed as Record<string, unknown>;
+      }
+    } catch {}
+
     return {
       id: toolCall.id,
-      name,
+      name: rawName,
       input,
     };
   });
-}
-
-function parseToolInput(raw: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
 }
 
 function normalizeStopReason(
@@ -234,7 +228,15 @@ function normalizeStopReason(
 }
 
 function isToolName(value: string): value is ToolName {
-  return value === "fetch_url" || value === "run_js" || value === "save_note";
+  return (
+    value === "fetch_url" ||
+    value === "read_file" ||
+    value === "run_js" ||
+    value === "write_document" ||
+    value === "memory_read" ||
+    value === "memory_append" ||
+    value === "memory_rewrite"
+  );
 }
 
 function getApiKey(): string {

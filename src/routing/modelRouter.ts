@@ -193,7 +193,9 @@ function toolBenchmarkBonus(
         belowMinimumPenalty
       );
     case "code":
-      return score * 25 + toolRow.noToolDisciplineRate * 8 + latencyBonus * 0.25;
+      return (
+        score * 25 + toolRow.noToolDisciplineRate * 8 + latencyBonus * 0.25
+      );
     case "reasoning":
       return score * 12 + toolRow.noToolDisciplineRate * 10;
     case "summary":
@@ -329,7 +331,7 @@ function isBenchmarkTask(value: string | undefined): value is BenchmarkTask {
 
 function isSmallModel(model: OpenRouterModelInfo): boolean {
   const id = model.id.toLowerCase();
-  return id.includes("7b") || id.includes("mini") || id.includes("haiku");
+  return id.includes("7b") || id.includes("mini");
 }
 
 function isCoderModel(model: OpenRouterModelInfo): boolean {

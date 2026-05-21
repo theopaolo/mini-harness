@@ -1,8 +1,24 @@
 import { fetchUrl, fetchUrlDefinition } from "./fetchUrl";
+import {
+  memoryAppend,
+  memoryAppendDefinition,
+  memoryRead,
+  memoryReadDefinition,
+  memoryRewrite,
+  memoryRewriteDefinition,
+} from "./memory";
+import { readFile, readFileDefinition } from "./readFile";
 import { runJs, runJsDefinition } from "./runJs";
-import { saveNote, saveNoteDefinition } from "./saveNote";
+import { writeDocument, writeDocumentDefinition } from "./writeDocument";
 
-export type ToolName = "fetch_url" | "run_js" | "save_note";
+export type ToolName =
+  | "fetch_url"
+  | "read_file"
+  | "run_js"
+  | "write_document"
+  | "memory_read"
+  | "memory_append"
+  | "memory_rewrite";
 
 export type ToolCall = {
   id: string;
@@ -12,8 +28,12 @@ export type ToolCall = {
 
 export const toolDefinitions = [
   fetchUrlDefinition,
+  readFileDefinition,
   runJsDefinition,
-  saveNoteDefinition,
+  writeDocumentDefinition,
+  memoryReadDefinition,
+  memoryAppendDefinition,
+  memoryRewriteDefinition,
 ] as const;
 
 export async function executeTool(call: ToolCall): Promise<string> {
@@ -21,10 +41,21 @@ export async function executeTool(call: ToolCall): Promise<string> {
     switch (call.name) {
       case "fetch_url":
         return await fetchUrl(readString(call.input, "url"));
+      case "read_file":
+        return await readFile(readString(call.input, "path"));
       case "run_js":
         return await runJs(readString(call.input, "code"));
-      case "save_note":
-        return await saveNote(readString(call.input, "content"));
+      case "write_document":
+        return await writeDocument(
+          readString(call.input, "filename"),
+          readString(call.input, "content"),
+        );
+      case "memory_read":
+        return await memoryRead();
+      case "memory_append":
+        return await memoryAppend(readString(call.input, "content"));
+      case "memory_rewrite":
+        return await memoryRewrite(readString(call.input, "content"));
     }
   } catch (error) {
     return `Erreur ${call.name}: ${errorMessage(error)}`;

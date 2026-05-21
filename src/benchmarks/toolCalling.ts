@@ -14,7 +14,7 @@ const MARKDOWN_OUTPUT = "model-bench/tool-benchmark.md";
 type ToolTaskId =
   | "single_run_js"
   | "parallel_run_js"
-  | "save_note"
+  | "memory_append"
   | "no_tool"
   | "final_after_observation";
 
@@ -76,10 +76,10 @@ const TASKS: ToolTask[] = [
     expectedTools: ["run_js", "run_js"],
   },
   {
-    id: "save_note",
+    id: "memory_append",
     prompt:
-      "Appelle obligatoirement save_note avec le contenu exact: TOOL_BENCH_OK. Ne donne pas la réponse finale maintenant.",
-    expectedTools: ["save_note"],
+      "Appelle obligatoirement memory_append avec le contenu exact: TOOL_BENCH_OK. Ne donne pas la réponse finale maintenant.",
+    expectedTools: ["memory_append"],
   },
   {
     id: "no_tool",
@@ -316,10 +316,10 @@ function validateArgs(task: ToolTask, calls: ToolCall[]): boolean {
         codes.some((code) => code.includes("99") && code.includes("3"))
       );
     }
-    case "save_note":
+    case "memory_append":
       return calls.some(
         (call) =>
-          call.name === "save_note" &&
+          call.name === "memory_append" &&
           call.input.content === "TOOL_BENCH_OK",
       );
     case "no_tool":
