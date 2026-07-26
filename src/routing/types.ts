@@ -1,4 +1,4 @@
-import type { OpenRouterModelInfo } from "../llm";
+import type { ModelBenchmarkRow, OpenRouterModelInfo } from "../llm";
 
 export type TaskKind = "tool" | "code" | "research" | "reasoning" | "summary" | "general";
 
@@ -39,5 +39,7 @@ export type RankedCandidate = {
   model: OpenRouterModelInfo;
   row: BenchmarkRow | undefined;
   toolRow: ToolBenchmarkRow | undefined;
+  /** Scores publics OpenRouter/Artificial Analysis, quand le modèle est classé. */
+  publicScores: ModelBenchmarkRow | undefined;
   score: number;
 };

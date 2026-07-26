@@ -1,3 +1,8 @@
+---
+name: redaction
+description: "Use when mission ask to write, rewrite, reword, or edit prose for a human reader. Triggers: 'write', 'rewrite', 'reword', 'edit this text', 'make it readable', 'remove AI tone'. Do NOT use for: source code analysis (code-review), number data analysis (data-analysis), structured technical report (tech-report)."
+---
+
 # AI Writing Tropes to Avoid
 
 ## Word Choice

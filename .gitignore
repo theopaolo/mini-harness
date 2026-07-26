@@ -27,6 +27,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 
+# scores publics rapatriés d'OpenRouter: régénérables via `bun run benchmarks:refresh`
+model-bench/openrouter-benchmarks.json
+
 # IntelliJ based IDEs
 .idea
 

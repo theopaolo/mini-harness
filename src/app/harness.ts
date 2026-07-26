@@ -9,8 +9,9 @@ import {
   buildSystemPrompt,
   detectSkill,
   loadSkillCatalog,
-  logSkillDetection,
+  pickDetectionModel,
 } from "../skills";
+import { withTimeout } from "../timeout";
 import { executeTool, type ToolCall } from "../tools";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 
@@ -46,11 +47,10 @@ export async function runHarness(
     : await routeModels(mission, userModels);
 
   const catalog = await loadSkillCatalog();
-  const detectionModel = pickDetectionModel(route.modelCandidates);
-  const skill = detectionModel
-    ? await detectSkill(mission, catalog, detectionModel)
-    : null;
-  logSkillDetection(mission, skill);
+  // `userModels` est vide quand un modèle est forcé: la détection réutilise alors
+  // ce modèle plutôt que d'aller en chercher un autre dans le dos de l'appelant.
+  const detectionModel = pickDetectionModel(userModels, route.modelCandidates);
+  const skill = await detectSkill(mission, catalog, detectionModel);
   const systemPrompt = buildSystemPrompt(SYSTEM_PROMPT, skill);
   const modelCandidates = route.modelCandidates;
   let modelIndex = 0;
@@ -333,12 +333,6 @@ function logTurn(turnNumber: number, action: string, result: string): void {
   console.log(`[tour ${turnNumber}] ${action} -> ${preview}`);
 }
 
-function pickDetectionModel(candidates: string[]): string | null {
-  const override = Bun.env.HARNESS_SKILL_DETECT_MODEL;
-  if (override) return override;
-  return candidates[0] ?? null;
-}
-
 function isRetryableModelError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return (
@@ -349,21 +343,3 @@ function isRetryableModelError(error: unknown): boolean {
   );
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  label: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`timeout: ${label} dépassé ${ms}ms`)),
-      ms,
-    );
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}

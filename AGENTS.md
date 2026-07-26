@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Documentation de l'agent du mini-harness.
+Documentation de l'agent de titi.
 
 ## Rôle
 
@@ -8,14 +8,33 @@ Le harness est un agent ReAct généraliste écrit à la main avec Bun et OpenRo
 Il reçoit une mission utilisateur en texte libre, choisit un modèle adapté, et
 boucle `Reason → Act → Observe` jusqu'à produire une réponse finale.
 
-Quatre outils sont disponibles :
+Les outils disponibles :
 
 - `fetch_url(url)` — récupère et nettoie une page HTTP(S).
 - `read_file(path)` — lit un fichier texte du cwd (chemins relatifs, refuse `..` et dotfiles).
 - `run_js(code)` — exécute du JavaScript déterministe via `Bun.spawn`.
-- `save_note(content)` — append Markdown dans `notes/rapport.md`.
+- `write_document(filename, content)` — écrit un livrable Markdown horodaté dans `documents/`.
+- `memory_read()` / `memory_append(content)` / `memory_rewrite(content)` — mémoire de travail dans `notes/memory.md`.
 
 Le détail de la boucle est dans `README.md`.
+
+## Choix du modèle
+
+`src/routing/modelRouter.ts` classe les modèles accessibles par la clé. Les
+signaux, du plus au moins prioritaire :
+
+1. `model-bench/tool-benchmark.json` — fiabilité mesurée du tool calling sur les
+   schémas d'outils de cette harness. Signal fort pour `tool` et `research`.
+2. `model-bench/benchmark.md` — qualité/latence/coût mesurés à la main.
+3. `GET /api/v1/benchmarks` — index publics `coding` / `agentic` / `intelligence`
+   (0-100), rafraîchis automatiquement et mis en cache 24 h. Couvrent les modèles
+   jamais mesurés localement.
+4. Heuristiques de nom (`isCoderModel`, `isSmallModel`, `kimi`) — dernier recours
+   pour un modèle trop récent pour être classé.
+
+`bun run benchmarks:refresh` rafraîchit le cache et affiche la couverture.
+`HARNESS_NO_LIVE_BENCHMARKS=1` désactive les scores publics pour un routage
+reproductible. Détails dans `README.md`.
 
 ## Skills
 
@@ -31,8 +50,8 @@ spécifique. Le harness ne charge un skill que si la mission le justifie : ça
    `callTextModel`. Le modèle renvoie le nom du skill pertinent, ou `none`.
 3. Si un skill est détecté, son corps est appendé au `SYSTEM_PROMPT` de base.
    Sinon le system prompt reste générique.
-4. Un log `── Détection skill ──` indique le skill chargé (ou `aucun skill
-   détecté`).
+4. Un log `── Détection skill ──` indique le modèle routeur utilisé et le skill
+   chargé (ou `aucun skill détecté`, avec la raison si la détection a échoué).
 
 Le mécanisme est provider-agnostic : l'injection se fait dans un message
 standard `role: system`, aucun format propriétaire.
@@ -51,6 +70,9 @@ boucle ReAct).
 - **[data-analysis](skills/data-analysis/SKILL.md)** — analyse de données
   chiffrées ou de réponses d'API JSON. Calcule avec `run_js`, identifie
   tendances et anomalies.
+- **[redaction](skills/redaction/SKILL.md)** — rédaction et reformulation :
+  catalogue de tics d'écriture IA à éviter. Nettement plus gros que les autres
+  (~17k caractères), donc coûteux en tokens dès qu'il est chargé.
 
 ### Ajouter un skill
 
@@ -70,8 +92,11 @@ boucle ReAct).
 ### Override de la détection
 
 - `HARNESS_SKILL_DETECT_MODEL=<id>` force un modèle spécifique pour la détection
-  (utile pour tester ou pour aller plus vite). Par défaut, le harness prend un
-  petit modèle du catalogue (`mini`/`haiku`/`8b`) ou à défaut le premier de la
-  liste.
+  (utile pour tester, ou pour imposer une variante `:free`). Par défaut,
+  `pickDetectionModel` prend le modèle **le moins cher** accessible par la clé :
+  la tâche est de renvoyer un seul mot, et payer le modèle le mieux classé pour ça
+  coûte ~500x plus cher sans gain mesuré. Les `:free` sont écartées (quotas
+  imprévisibles), et le vivier n'exige pas `tools` puisque la détection passe par
+  `callTextModel`. Détails et mesures dans `README.md`.
 - Pas de flag CLI pour activer/désactiver un skill : la détection est purement
   basée sur le texte de la mission. C'est le design voulu.

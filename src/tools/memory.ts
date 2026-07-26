@@ -56,26 +56,44 @@ export const memoryRewriteDefinition = {
   },
 } as const;
 
-export async function memoryRead(): Promise<string> {
-  const file = Bun.file(MEMORY_PATH);
-  if (!(await file.exists())) return "(mémoire vide)";
-  const text = await file.text();
-  return text.trim().length === 0 ? "(mémoire vide)" : text;
+// Le harness exécute les tool calls d'un même tour en parallèle. memory_append
+// fait un lire-modifier-écrire sur un fichier unique: deux appends simultanés
+// liraient le même `previous` et l'un écraserait l'autre. On sérialise donc tous
+// les accès mémoire dans une file, quel que soit l'ordonnancement de l'appelant.
+let memoryQueue: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(operation: () => Promise<T>): Promise<T> {
+  const result = memoryQueue.then(operation, operation);
+  memoryQueue = result.catch(() => {});
+  return result;
 }
 
-export async function memoryAppend(content: string): Promise<string> {
-  await mkdir("notes", { recursive: true });
-  const file = Bun.file(MEMORY_PATH);
-  const previous = (await file.exists()) ? await file.text() : "";
-  const separator = previous.trim().length > 0 ? "\n\n" : "";
-  const next = `${previous}${separator}${content.trim()}\n`;
-  await Bun.write(MEMORY_PATH, next);
-  return `Note ajoutée à ${MEMORY_PATH} (${content.length} caractères, total ${next.length}).`;
+export function memoryRead(): Promise<string> {
+  return serialized(async () => {
+    const file = Bun.file(MEMORY_PATH);
+    if (!(await file.exists())) return "(mémoire vide)";
+    const text = await file.text();
+    return text.trim().length === 0 ? "(mémoire vide)" : text;
+  });
 }
 
-export async function memoryRewrite(content: string): Promise<string> {
-  await mkdir("notes", { recursive: true });
-  const next = content.endsWith("\n") ? content : `${content}\n`;
-  await Bun.write(MEMORY_PATH, next);
-  return `Mémoire réécrite dans ${MEMORY_PATH} (${content.length} caractères).`;
+export function memoryAppend(content: string): Promise<string> {
+  return serialized(async () => {
+    await mkdir("notes", { recursive: true });
+    const file = Bun.file(MEMORY_PATH);
+    const previous = (await file.exists()) ? await file.text() : "";
+    const separator = previous.trim().length > 0 ? "\n\n" : "";
+    const next = `${previous}${separator}${content.trim()}\n`;
+    await Bun.write(MEMORY_PATH, next);
+    return `Note ajoutée à ${MEMORY_PATH} (${content.length} caractères, total ${next.length}).`;
+  });
+}
+
+export function memoryRewrite(content: string): Promise<string> {
+  return serialized(async () => {
+    await mkdir("notes", { recursive: true });
+    const next = content.endsWith("\n") ? content : `${content}\n`;
+    await Bun.write(MEMORY_PATH, next);
+    return `Mémoire réécrite dans ${MEMORY_PATH} (${content.length} caractères).`;
+  });
 }

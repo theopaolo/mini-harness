@@ -11,21 +11,6 @@ import { readFile, readFileDefinition } from "./readFile";
 import { runJs, runJsDefinition } from "./runJs";
 import { writeDocument, writeDocumentDefinition } from "./writeDocument";
 
-export type ToolName =
-  | "fetch_url"
-  | "read_file"
-  | "run_js"
-  | "write_document"
-  | "memory_read"
-  | "memory_append"
-  | "memory_rewrite";
-
-export type ToolCall = {
-  id: string;
-  name: ToolName;
-  input: Record<string, unknown>;
-};
-
 export const toolDefinitions = [
   fetchUrlDefinition,
   readFileDefinition,
@@ -36,7 +21,37 @@ export const toolDefinitions = [
   memoryRewriteDefinition,
 ] as const;
 
+// Dérivé de toolDefinitions: ajouter un outil au tableau suffit, le type et la
+// validation runtime suivent. Le switch de executeTool devient alors incomplet,
+// et tsc le signale.
+export type ToolName = (typeof toolDefinitions)[number]["function"]["name"];
+
+const TOOL_NAMES: ReadonlySet<string> = new Set(
+  toolDefinitions.map((definition) => definition.function.name),
+);
+
+export function isToolName(value: string): value is ToolName {
+  return TOOL_NAMES.has(value);
+}
+
+export type ToolCall = {
+  id: string;
+  /** Nom brut demandé par le modèle. Validé par executeTool, pas avant. */
+  name: string;
+  input: Record<string, unknown>;
+  /** Renseigné quand `arguments` n'était pas du JSON exploitable. */
+  argumentsError?: string;
+};
+
 export async function executeTool(call: ToolCall): Promise<string> {
+  if (!isToolName(call.name)) {
+    return `Erreur: outil inconnu "${call.name}". Outils disponibles: ${[...TOOL_NAMES].join(", ")}.`;
+  }
+
+  if (call.argumentsError) {
+    return `Erreur ${call.name}: ${call.argumentsError}`;
+  }
+
   try {
     switch (call.name) {
       case "fetch_url":

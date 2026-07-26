@@ -1,5 +1,5 @@
 {
-  "name": "mini-harness",
+  "name": "titi",
   "module": "index.ts",
   "type": "module",
   "private": true,
@@ -8,12 +8,12 @@
     "debug": "bun run index.ts --debug --step",
     "benchmark": "bun run src/benchmarks/general.ts",
     "tool-benchmark": "bun run src/benchmarks/toolCalling.ts",
-    "typecheck": "tsc --noEmit"
+    "benchmarks:refresh": "bun run src/routing/refreshBenchmarks.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --pass-with-no-tests"
   },
   "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
+    "@types/bun": "latest",
     "typescript": "^5"
   },
   "dependencies": {
