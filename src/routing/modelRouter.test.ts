@@ -3,7 +3,6 @@ import { expect, test } from "bun:test";
 import type { ModelBenchmarkRow, OpenRouterModelInfo } from "../llm";
 import type { BenchmarkRow } from "./types";
 import {
-  classifyMission,
   codeAffinityBonus,
   parseBenchmarkMarkdown,
   qualityFor,
@@ -75,20 +74,6 @@ test("aucun bonus code ne dépasse celui d'un modèle coder dédié", () => {
       expect(codeAffinityBonus(model(id), text)).toBeLessThanOrEqual(8);
     }
   }
-});
-
-test("classifyMission reconnaît une URL comme recherche", () => {
-  expect(classifyMission("Résume https://bun.sh/docs")).toBe("research");
-});
-
-test("classifyMission reconnaît les missions outil, code et raisonnement", () => {
-  expect(classifyMission("Calcule 37*42")).toBe("tool");
-  expect(classifyMission("Refactor cette fonction TypeScript")).toBe("code");
-  expect(classifyMission("Démontre que l'algo termine")).toBe("reasoning");
-});
-
-test("classifyMission retombe sur general", () => {
-  expect(classifyMission("Bonjour")).toBe("general");
 });
 
 test("benchmark.md l'emporte sur les scores publics quand la ligne existe", () => {

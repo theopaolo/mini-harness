@@ -5,12 +5,8 @@ import {
   type ModelTurn,
 } from "../llm";
 import { routeModels } from "../routing/modelRouter";
-import {
-  buildSystemPrompt,
-  detectSkill,
-  loadSkillCatalog,
-  pickDetectionModel,
-} from "../skills";
+import { pickCheapModel } from "../cheapModel";
+import { buildSystemPrompt, detectSkill, loadSkillCatalog } from "../skills";
 import { withTimeout } from "../timeout";
 import { executeTool, type ToolCall } from "../tools";
 import { SYSTEM_PROMPT } from "./systemPrompt";
@@ -38,19 +34,25 @@ export async function runHarness(
 
   const userModels = forcedModel ? [] : await listUserModels();
 
+  // Un seul modèle bon marché pour les deux appels auxiliaires: classer la mission
+  // et router les skills. `userModels` est vide quand un modèle est forcé, et on
+  // réutilise alors ce modèle plutôt que d'en chercher un autre dans le dos de
+  // l'appelant.
+  const cheapModel = pickCheapModel(
+    userModels,
+    forcedModel ? [forcedModel] : [],
+  );
+
   const route = forcedModel
     ? {
         selectedModel: forcedModel,
         modelCandidates: [forcedModel],
         reason: "modèle forcé par option ou HARNESS_MODEL",
       }
-    : await routeModels(mission, userModels);
+    : await routeModels(mission, userModels, cheapModel);
 
   const catalog = await loadSkillCatalog();
-  // `userModels` est vide quand un modèle est forcé: la détection réutilise alors
-  // ce modèle plutôt que d'aller en chercher un autre dans le dos de l'appelant.
-  const detectionModel = pickDetectionModel(userModels, route.modelCandidates);
-  const skill = await detectSkill(mission, catalog, detectionModel);
+  const skill = await detectSkill(mission, catalog, cheapModel);
   const systemPrompt = buildSystemPrompt(SYSTEM_PROMPT, skill);
   const modelCandidates = route.modelCandidates;
   let modelIndex = 0;
@@ -100,25 +102,11 @@ export async function runHarness(
         return message;
       }
 
-      const toolResults = await Promise.all(
-        turn.tool_uses.map(async (toolUse) => {
-          await debug.beforeTool(turnNumber, toolUse);
-          console.log(`[tour ${turnNumber}] tool → ${toolUse.name}…`);
-          const start = Date.now();
-          const result = await withTimeout(
-            executeTool(toolUse),
-            TOOL_CALL_TIMEOUT_MS,
-            `tool ${toolUse.name}`,
-          ).catch(
-            (error) =>
-              `Erreur ${toolUse.name}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-          console.log(
-            `[tour ${turnNumber}] tool ← ${toolUse.name} (${Date.now() - start}ms)`,
-          );
-          logTurn(turnNumber, toolUse.name, result);
-          return { toolUse, result };
-        }),
+      const toolResults = await runToolCalls(
+        turn.tool_uses,
+        turnNumber,
+        debug,
+        Boolean(options.debug || options.step),
       );
 
       for (const { toolUse, result } of toolResults) {
@@ -148,6 +136,70 @@ export async function runHarness(
   const message = `Arrêt propre: maximum de ${maxTurns} tours dépassé.`;
   logTurn(maxTurns, "max_turns", message);
   return message;
+}
+
+type ToolOutcome = { toolUse: ToolCall; result: string };
+
+/**
+ * Exécute les tool calls d'un tour.
+ *
+ * En parallèle, les lignes de log de chaque outil sont tamponnées puis vidées d'un
+ * coup: sans ça, plusieurs outils écrivent en même temps et le journal devient
+ * illisible, ce qui va contre l'intérêt même de cette harness. Chaque outil est
+ * étiqueté `nom#rang` pour rester identifiable.
+ *
+ * En mode debug ou pas-à-pas, on repasse en séquentiel. On demande explicitement à
+ * voir le mécanisme se dérouler dans l'ordre, et des blocs de debug concurrents ne
+ * racontent plus rien.
+ */
+async function runToolCalls(
+  toolUses: ToolCall[],
+  turnNumber: number,
+  debug: DebugSession,
+  sequential: boolean,
+): Promise<ToolOutcome[]> {
+  const parallel = !sequential && toolUses.length > 1;
+
+  const runOne = async (
+    toolUse: ToolCall,
+    slot: number,
+  ): Promise<ToolOutcome> => {
+    const tag = parallel ? `${toolUse.name}#${slot + 1}` : toolUse.name;
+    const buffer: string[] = [];
+    const log = (line: string) => {
+      if (parallel) buffer.push(line);
+      else console.log(line);
+    };
+
+    await debug.beforeTool(turnNumber, toolUse);
+    log(`[tour ${turnNumber}] tool → ${tag}…`);
+
+    const start = Date.now();
+    const result = await withTimeout(
+      executeTool(toolUse),
+      TOOL_CALL_TIMEOUT_MS,
+      `tool ${toolUse.name}`,
+    ).catch(
+      (error) =>
+        `Erreur ${toolUse.name}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+
+    log(`[tour ${turnNumber}] tool ← ${tag} (${Date.now() - start}ms)`);
+    log(`[tour ${turnNumber}] ${tag} -> ${resultPreview(result)}`);
+    if (parallel) console.log(buffer.join("\n"));
+
+    return { toolUse, result };
+  };
+
+  if (sequential) {
+    const outcomes: ToolOutcome[] = [];
+    for (const [slot, toolUse] of toolUses.entries()) {
+      outcomes.push(await runOne(toolUse, slot));
+    }
+    return outcomes;
+  }
+
+  return Promise.all(toolUses.map(runOne));
 }
 
 type DebugSession = {
@@ -329,8 +381,11 @@ async function callModelWithFallback(
 }
 
 function logTurn(turnNumber: number, action: string, result: string): void {
-  const preview = result.replace(/\s+/g, " ").slice(0, 50);
-  console.log(`[tour ${turnNumber}] ${action} -> ${preview}`);
+  console.log(`[tour ${turnNumber}] ${action} -> ${resultPreview(result)}`);
+}
+
+function resultPreview(result: string): string {
+  return result.replace(/\s+/g, " ").slice(0, 50);
 }
 
 function isRetryableModelError(error: unknown): boolean {

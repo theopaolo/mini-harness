@@ -1,14 +1,8 @@
-import {
-  callTextModel,
-  type ChatMessage,
-  type OpenRouterModelInfo,
-} from "./llm";
+import { AUX_TIMEOUT_MS } from "./cheapModel";
+import { callTextModel, type ChatMessage } from "./llm";
 import { withTimeout } from "./timeout";
 
 const SKILLS_DIR = "skills";
-
-/** Un seul mot à produire: au-delà, le modèle choisi est inadapté à la tâche. */
-const DETECTION_TIMEOUT_MS = 20_000;
 
 export type Skill = {
   name: string;
@@ -33,66 +27,6 @@ export async function loadSkillCatalog(): Promise<Skill[]> {
   return results
     .filter((s): s is Skill => s !== null)
     .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Coût approximatif d'une détection, en USD.
- *
- * La requête est petite et très stable: le catalogue de skills et la mission en
- * entrée, un seul mot en sortie. Ces ordres de grandeur suffisent à comparer des
- * modèles entre eux.
- */
-const DETECTION_PROMPT_TOKENS = 700;
-const DETECTION_COMPLETION_TOKENS = 5;
-
-function detectionCost(model: OpenRouterModelInfo): number | null {
-  const prompt = Number(model.pricing.prompt);
-  const completion = Number(model.pricing.completion);
-  if (!Number.isFinite(prompt) || !Number.isFinite(completion)) return null;
-  if (prompt < 0 || completion < 0) return null;
-
-  return (
-    prompt * DETECTION_PROMPT_TOKENS +
-    completion * DETECTION_COMPLETION_TOKENS
-  );
-}
-
-/**
- * Choisit le modèle qui route les skills.
- *
- * La détection consiste à renvoyer UN mot parmi quatre. Prendre pour ça le modèle
- * le mieux classé — l'ancien comportement — payait un prix de pointe pour une
- * classification triviale: mesuré, ~500x le prix du modèle le moins cher.
- *
- * On prend donc le moins cher, et pas le « meilleur petit modèle »: mesuré sur les
- * quatre skills livrés, les modèles à quelques centimes du million de tokens
- * classent correctement, sans corrélation utile avec `intelligence_index` à cette
- * échelle. Le seul mode d'échec observé est l'excès de zèle (charger un skill là où
- * `none` était attendu), qui coûte des tokens mais ne fausse pas la réponse.
- *
- * Deux exclusions:
- * - la détection passe par `callTextModel`, sans outils: le vivier n'a donc pas
- *   besoin de `tools`, ce qui laisse accès à des modèles bien moins chers que ceux
- *   que le routeur retient pour la boucle;
- * - les variantes `:free` sont écartées malgré un coût nul, parce que leurs quotas
- *   les rendent imprévisibles. À 7e-6 USD l'appel, l'économie ne vaut pas le risque.
- *   Pour en forcer une: `HARNESS_SKILL_DETECT_MODEL`.
- */
-export function pickDetectionModel(
-  models: OpenRouterModelInfo[],
-  routerCandidates: string[],
-): string | null {
-  const override = Bun.env.HARNESS_SKILL_DETECT_MODEL;
-  if (override) return override;
-
-  const priced = models
-    .filter((model) => !model.id.endsWith(":free"))
-    .map((model) => ({ id: model.id, cost: detectionCost(model) }))
-    .filter((entry): entry is { id: string; cost: number } => entry.cost !== null)
-    .filter((entry) => entry.cost > 0)
-    .sort((a, b) => a.cost - b.cost || a.id.localeCompare(b.id));
-
-  return priced[0]?.id ?? routerCandidates[0] ?? null;
 }
 
 export async function detectSkill(
@@ -135,7 +69,7 @@ export async function detectSkill(
   try {
     const result = await withTimeout(
       callTextModel(messages, detectionModel),
-      DETECTION_TIMEOUT_MS,
+      AUX_TIMEOUT_MS,
       `détection skill ${detectionModel}`,
     );
     if (Bun.env.HARNESS_SKILL_DEBUG) {

@@ -1,3 +1,4 @@
+import { pickCheapModel } from "../cheapModel";
 import { callToolModel, listUserModels, type HarnessMessage } from "../llm";
 import { routeModels } from "../routing/modelRouter";
 import { executeTool } from "../tools";
@@ -21,7 +22,7 @@ const DEFAULT_MISSION =
  */
 export async function runReactLoopExplained(mission: string): Promise<string> {
   const models = await listUserModels();
-  const route = await routeModels(mission, models);
+  const route = await routeModels(mission, models, pickCheapModel(models));
   const model = route.selectedModel;
 
   console.log(`Modèle: ${model}`);

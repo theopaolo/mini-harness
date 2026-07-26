@@ -5,6 +5,10 @@ import {
   loadBenchmarkIndex,
   type BenchmarkIndex,
 } from "./benchmarkSource";
+import {
+  classifyMission,
+  type MissionClassification,
+} from "./missionClassifier";
 import type {
   TaskKind,
   BenchmarkTask,
@@ -22,16 +26,21 @@ const TOOL_BENCHMARK_PATH = "model-bench/tool-benchmark.json";
 export async function routeModels(
   mission: string,
   models: OpenRouterModelInfo[],
+  cheapModel: string | null,
 ): Promise<ModelRoute> {
-  const taskKind = classifyMission(mission);
-  const [benchmarkRows, toolBenchmarkRows, scores] = await Promise.all([
-    readBenchmarkRows(),
-    readToolBenchmarkRows(),
-    Bun.env.HARNESS_NO_LIVE_BENCHMARKS
-      ? Promise.resolve(EMPTY_BENCHMARK_INDEX)
-      : loadBenchmarkIndex(),
-  ]);
+  // La classification et le chargement des scores sont indépendants: un appel
+  // réseau plus une lecture disque, autant les mener ensemble.
+  const [classification, benchmarkRows, toolBenchmarkRows, scores] =
+    await Promise.all([
+      classifyMission(mission, cheapModel),
+      readBenchmarkRows(),
+      readToolBenchmarkRows(),
+      Bun.env.HARNESS_NO_LIVE_BENCHMARKS
+        ? Promise.resolve(EMPTY_BENCHMARK_INDEX)
+        : loadBenchmarkIndex(),
+    ]);
 
+  const taskKind = classification.kind;
   const candidates = rankModels(
     mission,
     taskKind,
@@ -50,66 +59,8 @@ export async function routeModels(
     modelCandidates: candidates.map((candidate) => candidate.model.id),
     selectedModel: winner.model.id,
     taskKind,
-    reason: explainRoute(taskKind, winner, scores),
+    reason: explainRoute(classification, winner, scores),
   };
-}
-
-export function classifyMission(mission: string): TaskKind {
-  const text = mission.toLowerCase();
-
-  if (/\bhttps?:\/\//.test(text)) return "research";
-  if (matches(text, ["recherche", "compare", "comparatif", "rapport"])) {
-    return "research";
-  }
-  if (matches(text, ["résume", "resume", "summary", "synthèse"])) {
-    return "summary";
-  }
-  if (
-    matches(text, [
-      "calcule",
-      "calcul",
-      "addition",
-      "multiplie",
-      "json",
-      "parser",
-      "parse",
-      "transforme",
-      "convertis",
-    ])
-  ) {
-    return "tool";
-  }
-  if (
-    matches(text, [
-      "code",
-      "typescript",
-      "javascript",
-      "bug",
-      "fonction",
-      "implémente",
-      "implemente",
-      "refactor",
-    ])
-  ) {
-    return "code";
-  }
-  if (
-    matches(text, [
-      "raisonne",
-      "raisonnement",
-      "logique",
-      "prouve",
-      "démontre",
-      "demontre",
-      "stratégie",
-      "strategie",
-      "architecture",
-    ])
-  ) {
-    return "reasoning";
-  }
-
-  return "general";
 }
 
 function rankModels(
@@ -295,10 +246,17 @@ function findToolBenchmarkRow(
 }
 
 function explainRoute(
-  taskKind: TaskKind,
+  classification: MissionClassification,
   winner: RankedCandidate,
   scores: BenchmarkIndex,
 ): string {
+  const taskKind = classification.kind;
+  const how = [
+    `classée par ${classification.source}`,
+    classification.note,
+  ]
+    .filter(Boolean)
+    .join(", ");
   const caps = [
     supports(winner.model, "tools") ? "tools" : null,
     supports(winner.model, "reasoning") ? "reasoning" : null,
@@ -311,7 +269,7 @@ function explainRoute(
     ? `tool ${Math.round(winner.toolRow.totalScore * 100)}%`
     : "pas de tool-benchmark";
 
-  return `${taskKind}: ${modelLabel(winner.model.id)} (${caps.join(", ") || "capacités limitées"}; benchmark ${bench}; ${toolBench}; ${explainScores(taskKind, winner, scores)})`;
+  return `${taskKind} (${how}): ${modelLabel(winner.model.id)} (${caps.join(", ") || "capacités limitées"}; benchmark ${bench}; ${toolBench}; ${explainScores(taskKind, winner, scores)})`;
 }
 
 function explainScores(

@@ -68,10 +68,12 @@ OpenRouter, elle essaie le suivant.
 - `src/app/harness.ts`: boucle ReAct, gestion de `tool_use` et `end_turn`.
 - `src/app/reactLoop.explained.ts`: version pédagogique minimale de la boucle ReAct.
 - `src/app/systemPrompt.ts`: prompt système de la harness.
-- `src/timeout.ts`: `withTimeout`, partagé par la boucle et la détection de skill.
+- `src/timeout.ts`: `withTimeout`, partagé par la boucle et les appels auxiliaires.
+- `src/cheapModel.ts`: choix du modèle le moins cher pour les appels auxiliaires.
 - `src/llm/openrouter.ts`: appel HTTP OpenRouter, listing des modèles et normalisation des réponses.
 - `src/llm/types.ts`: types partagés côté messages, modèles et tours LLM.
 - `src/routing/modelRouter.ts`: choix du modèle selon la mission, les capacités OpenRouter et les benchmarks.
+- `src/routing/missionClassifier.ts`: classification de la mission par LLM, repli sur mots-clés.
 - `src/routing/benchmarkSource.ts`: scores publics OpenRouter, cache disque et jointure par slug.
 - `src/routing/refreshBenchmarks.ts`: `bun run benchmarks:refresh`, rafraîchit le cache et affiche la couverture.
 - `src/skills.ts`: chargement du catalogue `skills/*/SKILL.md` et détection du skill.
@@ -83,8 +85,8 @@ OpenRouter, elle essaie le suivant.
 - `src/tools/memory.ts`: implémentation de `memory_read`, `memory_append`, `memory_rewrite`.
 - `src/benchmarks/general.ts`: benchmark qualité/coût/latence.
 - `src/benchmarks/toolCalling.ts`: benchmark de fiabilité tool calling.
-- `notes/memory.md`: mémoire de travail, écrite par les outils `memory_*`.
-- `documents/`: livrables finaux, écrits par `write_document`.
+- `notes/memory.md`: mémoire de travail, écrite par les outils `memory_*` (gitignoré).
+- `documents/`: livrables finaux, écrits par `write_document` (gitignoré).
 
 Le benchmark général est lancé avec:
 
@@ -238,13 +240,50 @@ de l'outil: remplacer une capacité fragile du LLM par une opération détermini
 
 Avant le premier tour, `src/routing/modelRouter.ts` choisit un modèle.
 
-Il utilise trois sources:
+Il utilise ces sources:
 
-- la mission utilisateur;
+- le type de la mission, classé par un modèle bon marché (voir juste en dessous);
 - `OpenRouter /models/user`, qui indique les modèles accessibles par la clé et leurs capacités (`tools`, `reasoning`, `parallel_tool_calls`, etc.);
 - `OpenRouter /benchmarks`, qui donne des scores publics par modèle, mis à jour sans intervention (voir plus bas);
 - `model-bench/benchmark.md`, qui donne la qualité, la latence et le coût mesurés sur quelques tâches;
 - `model-bench/tool-benchmark.json`, qui mesure la fiabilité réelle du tool calling.
+
+### La mission est classée par un modèle, plus par des mots-clés
+
+Le routage dépend du type de mission (`tool`, `code`, `research`, `reasoning`,
+`summary`, `general`). Ce type venait d'une liste de mots-clés écrite à la main,
+qui ne voit que le vocabulaire qu'on a pensé à lister:
+
+```text
+« Relis src/skills.ts et dis-moi ce qui cloche »
+  mots-clés -> general   (ni « code », ni « bug », ni « refactor »)
+  modèle    -> code
+```
+
+Mesuré sur 11 missions, avant/après: **mots-clés 9/11, modèle seul 9/11.** Match
+nul — mais ils se trompent sur des choses différentes, et c'est ce qui a décidé
+du design. Le modèle lit l'intention derrière une formulation inattendue; la
+liste, elle, encodait une règle *structurelle* que le modèle ignore:
+
+```text
+« Résume https://bun.sh/docs »
+  modèle -> summary    (vrai sur le fond: c'est bien un résumé)
+  besoin -> research   (il faut d'abord fetch_url, donc les bonus qui vont avec)
+```
+
+D'où la combinaison retenue: une **règle déterministe d'abord** — une URL implique
+un fetch, donc `research`, sans appel modèle — puis le modèle pour l'intention.
+Résultat: **11/11**.
+
+`classifyMissionByKeywords` survit en secours uniquement: hors ligne, sans clé, ou
+sur échec d'appel, il faut bien router quand même. La ligne `Route:` dit toujours
+qui a décidé:
+
+```text
+Route: code (classée par modèle): kimi-k2.6 (…)
+Route: research (classée par règle URL): kimi-k2.6 (…)
+Route: code (classée par mots-clés, classification en échec (OpenRouter 401…)): …
+```
 
 Exemples de routage:
 
@@ -392,9 +431,10 @@ Routeur skill : inclusionai/ling-2.6-flash
 Skill chargé : code-review (585 chars injectés)
 ```
 
-### Le routeur de skills prend le modèle le moins cher
+### Les appels auxiliaires prennent le modèle le moins cher
 
-La détection consiste à répondre **un mot** parmi quatre. Utiliser pour ça le
+Deux appels par mission ne demandent qu'**un mot** en réponse: classer la mission
+(`classifyMission`) et router les skills (`detectSkill`). Utiliser pour ça le
 modèle le mieux classé — l'ancien comportement — payait un prix de pointe pour
 une classification triviale: mesuré, `claude-opus-5` coûte ~500x le modèle le
 moins cher du compte pour exactement le même travail.
@@ -405,7 +445,7 @@ moins cher du compte pour exactement le même travail.
 | `moonshotai/kimi-k2.6`       | $0.00044           |
 | `inclusionai/ling-2.6-flash` | $0.0000072         |
 
-`pickDetectionModel` prend donc le moins cher, et non le « meilleur petit
+`pickCheapModel` prend donc le moins cher, et non le « meilleur petit
 modèle ». Ce n'est pas une intuition: sur les quatre skills livrés, les modèles
 les moins chers classent correctement, et `intelligence_index` ne prédit pas
 cette tâche à cette échelle — le moins cher du catalogue (index 14,1) fait 6/6 là
@@ -420,16 +460,18 @@ Deux exclusions volontaires:
   la boucle;
 - les variantes `:free` sont écartées malgré un coût nul: leurs quotas les rendent
   imprévisibles, et à $7e-6 l'appel l'économie ne vaut pas le risque. Pour en
-  forcer une, passe par `HARNESS_SKILL_DETECT_MODEL`.
+  forcer une, passe par `HARNESS_CHEAP_MODEL`.
 
-La détection est bornée à 20 s. Un modèle qui dépasse ça pour produire un mot est
+Ces appels sont bornés à 20 s. Un modèle qui dépasse ça pour produire un mot est
 inadapté, et sans cette borne il bloquerait le démarrage: certains modèles bon
 marché mais lents mettent plus de 10 s.
 
 Variables d'environnement utiles:
 
-- `HARNESS_SKILL_DETECT_MODEL`: force le modèle utilisé pour la détection.
+- `HARNESS_CHEAP_MODEL`: force le modèle des appels auxiliaires (classification
+  de mission et routage des skills).
 - `HARNESS_SKILL_DEBUG=1`: log la réponse brute du routeur de skills.
+- `HARNESS_CLASSIFY_DEBUG=1`: log la réponse brute du classificateur de mission.
 
 Ajouter un skill = créer `skills/<nom>/SKILL.md` avec un `name` et une
 `description` claire (les déclencheurs guident le routeur). Aucun code à
@@ -451,8 +493,28 @@ Le log contient:
 - l'action (`run_js`, `fetch_url`, `memory_append`, `end_turn`, etc.);
 - les 50 premiers caractères du résultat.
 
-Si le modèle demande plusieurs outils dans le même tour, ils sont tous exécutés
-et loggés avec le même numéro de tour.
+### Plusieurs outils dans le même tour
+
+Les tool calls d'un même tour sont exécutés en parallèle. Écrire leurs logs au fil
+de l'eau les entrelaçait, ce qui rendait le journal illisible — le contraire du but
+de cette harness. Les lignes de chaque outil sont donc tamponnées puis vidées d'un
+coup, et étiquetées `nom#rang`:
+
+```text
+[tour 2] tool → run_js#1…
+[tour 2] tool ← run_js#1 (612ms)
+[tour 2] run_js#1 -> 96
+[tour 2] tool → run_js#2…
+[tour 2] tool ← run_js#2 (588ms)
+[tour 2] run_js#2 -> 33
+```
+
+Chaque bloc est contigu, mais les blocs sortent dans l'ordre d'**achèvement**, pas
+de demande — c'est ce que « parallèle » veut dire, et le rang le rend explicite.
+
+En `--debug` et `--step`, les outils repassent en **séquentiel**. On demande alors
+explicitement à voir le mécanisme se dérouler dans l'ordre, et des blocs de debug
+concurrents ne racontent plus rien.
 
 ## Vérifier
 
@@ -464,8 +526,11 @@ bun run test
 Les tests couvrent les parties pures et piégeuses, sans appel réseau:
 
 - `src/skills.test.ts`: chargement du catalogue, frontmatter replié sur plusieurs
-  lignes, tolérance de `normalizeChoice` aux réponses bavardes du routeur, et choix
-  du modèle de détection le moins cher.
+  lignes, tolérance de `normalizeChoice` aux réponses bavardes du routeur.
+- `src/cheapModel.test.ts`: choix du modèle le moins cher pour les appels
+  auxiliaires (exclusion des `:free`, tarifs illisibles, stabilité).
+- `src/routing/missionClassifier.test.ts`: règle URL, normalisation de la réponse
+  du modèle, repli sur mots-clés, et le cas où la liste de mots-clés se trompe.
 - `src/tools/index.test.ts`: outil inconnu, arguments JSON invalides, garde-fous
   de `run_js`.
 - `src/tools/memory.test.ts`: appends concurrents (le harness exécute les tool

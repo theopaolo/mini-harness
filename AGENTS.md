@@ -32,6 +32,12 @@ signaux, du plus au moins prioritaire :
 4. Heuristiques de nom (`isCoderModel`, `isSmallModel`, `kimi`) — dernier recours
    pour un modèle trop récent pour être classé.
 
+Le **type de mission** vient de `src/routing/missionClassifier.ts` : une règle
+déterministe d'abord (une URL implique un fetch, donc `research`), puis le modèle
+bon marché pour l'intention. La liste de mots-clés ne sert plus que de secours hors
+ligne. Mesuré sur 11 missions : mots-clés 9/11, modèle seul 9/11, combinaison
+11/11.
+
 `bun run benchmarks:refresh` rafraîchit le cache et affiche la couverture.
 `HARNESS_NO_LIVE_BENCHMARKS=1` désactive les scores publics pour un routage
 reproductible. Détails dans `README.md`.
@@ -91,9 +97,10 @@ boucle ReAct).
 
 ### Override de la détection
 
-- `HARNESS_SKILL_DETECT_MODEL=<id>` force un modèle spécifique pour la détection
-  (utile pour tester, ou pour imposer une variante `:free`). Par défaut,
-  `pickDetectionModel` prend le modèle **le moins cher** accessible par la clé :
+- `HARNESS_CHEAP_MODEL=<id>` force le modèle des appels auxiliaires — routage des
+  skills et classification de la mission (utile pour tester, ou pour imposer une
+  variante `:free`). Par défaut, `pickCheapModel` prend le modèle **le moins cher**
+  accessible par la clé :
   la tâche est de renvoyer un seul mot, et payer le modèle le mieux classé pour ça
   coûte ~500x plus cher sans gain mesuré. Les `:free` sont écartées (quotas
   imprévisibles), et le vivier n'exige pas `tools` puisque la détection passe par

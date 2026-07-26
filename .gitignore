@@ -30,6 +30,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # scores publics rapatriés d'OpenRouter: régénérables via `bun run benchmarks:refresh`
 model-bench/openrouter-benchmarks.json
 
+# sorties des outils: mémoire de travail et livrables produits par les missions.
+# Les outils recréent ces dossiers au besoin, rien à versionner.
+notes/
+documents/
+
 # IntelliJ based IDEs
 .idea
 
