@@ -13,20 +13,32 @@ export type Skill = {
 };
 
 export async function loadSkillCatalog(): Promise<Skill[]> {
-  const glob = new Bun.Glob(`${SKILLS_DIR}/*/SKILL.md`);
-  const paths: string[] = [];
-  for await (const path of glob.scan(".")) paths.push(path);
+  const skillFilePattern = `${SKILLS_DIR}/*/SKILL.md`;
+  const skillFileMatcher = new Bun.Glob(skillFilePattern);
+  const skillFilePaths: string[] = [];
 
-  const results = await Promise.all(
-    paths.map(async (path) => {
-      const content = await Bun.file(path).text();
-      return parseSkillFile(content, path);
+  for await (const skillFilePath of skillFileMatcher.scan(".")) {
+    skillFilePaths.push(skillFilePath);
+  }
+
+  const parsedSkills = await Promise.all(
+    skillFilePaths.map(async (skillFilePath) => {
+      const skillFile = Bun.file(skillFilePath);
+      const skillFileContent = await skillFile.text();
+
+      return parseSkillFile(skillFileContent, skillFilePath);
     }),
   );
 
-  return results
-    .filter((s): s is Skill => s !== null)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const validSkills = parsedSkills.filter(
+    (skill): skill is Skill => skill !== null,
+  );
+
+  validSkills.sort((firstSkill, secondSkill) =>
+    firstSkill.name.localeCompare(secondSkill.name),
+  );
+
+  return validSkills;
 }
 
 export async function detectSkill(
@@ -36,10 +48,12 @@ export async function detectSkill(
 ): Promise<Skill | null> {
   const missionPreview =
     mission.length > 80 ? `${mission.slice(0, 80)}…` : mission;
+
   console.log("── Détection skill ──────────────────────────────");
   console.log(`Mission analysée : "${missionPreview}"`);
 
-  if (!detectionModel || catalog.length === 0) {
+  const canDetectSkill = detectionModel !== null && catalog.length > 0;
+  if (!canDetectSkill) {
     console.log("Skill chargé : aucun skill détecté");
     return null;
   }
@@ -48,48 +62,57 @@ export async function detectSkill(
   // qui exécute la mission, et ça doit se voir.
   console.log(`Routeur skill : ${detectionModel}`);
 
-  const skillList = catalog
+  const availableSkills = catalog
     .map((skill) => `- ${skill.name}: ${skill.description}`)
     .join("\n");
 
+  const routerInstructions =
+    "Tu es un routeur de skills. Tu reçois une mission utilisateur et une liste de skills disponibles. " +
+    "Tu réponds par UN SEUL mot : le nom exact du skill le plus pertinent, ou 'none' si aucun ne correspond. " +
+    "Pas de phrase, pas de ponctuation, pas d'explication.";
+
+  const routingRequest =
+    `Skills disponibles :\n${availableSkills}\n\n` +
+    `Mission :\n${mission}\n\n` +
+    "Réponds avec un seul mot.";
+
   const messages: ChatMessage[] = [
-    {
-      role: "system",
-      content:
-        "Tu es un routeur de skills. Tu reçois une mission utilisateur et une liste de skills disponibles. " +
-        "Tu réponds par UN SEUL mot : le nom exact du skill le plus pertinent, ou 'none' si aucun ne correspond. " +
-        "Pas de phrase, pas de ponctuation, pas d'explication.",
-    },
-    {
-      role: "user",
-      content: `Skills disponibles :\n${skillList}\n\nMission :\n${mission}\n\nRéponds avec un seul mot.`,
-    },
+    { role: "system", content: routerInstructions },
+    { role: "user", content: routingRequest },
   ];
 
   try {
-    const result = await withTimeout(
+    const modelResponse = await withTimeout(
       callTextModel(messages, detectionModel),
       AUX_TIMEOUT_MS,
       `détection skill ${detectionModel}`,
     );
+
     if (Bun.env.HARNESS_SKILL_DEBUG) {
       console.log(
-        `[skill-debug] modèle=${detectionModel} brut="${result.content}"`,
+        `[skill-debug] modèle=${detectionModel} brut="${modelResponse.content}"`,
       );
     }
-    const choice = normalizeChoice(result.content, catalog);
-    const skill =
-      !choice || choice === "none"
-        ? null
-        : (catalog.find((s) => s.name.toLowerCase() === choice) ?? null);
-    if (skill) {
-      console.log(
-        `Skill chargé : ${skill.name} (${skill.charCount} chars injectés)`,
-      );
-    } else {
+
+    const normalizedChoice = normalizeChoice(modelResponse.content, catalog);
+    if (!normalizedChoice || normalizedChoice === "none") {
       console.log("Skill chargé : aucun skill détecté");
+      return null;
     }
-    return skill;
+
+    const selectedSkill =
+      catalog.find((skill) => skill.name.toLowerCase() === normalizedChoice) ??
+      null;
+
+    if (!selectedSkill) {
+      console.log("Skill chargé : aucun skill détecté");
+      return null;
+    }
+
+    console.log(
+      `Skill chargé : ${selectedSkill.name} (${selectedSkill.charCount} chars injectés)`,
+    );
+    return selectedSkill;
   } catch (error) {
     // Ne pas confondre "aucun skill ne correspond" et "la détection a échoué":
     // un 401 ou un timeout doit être visible sans HARNESS_SKILL_DEBUG.
@@ -100,22 +123,41 @@ export async function detectSkill(
 }
 
 /** Exporté pour les tests: c'est la partie fragile de la détection. */
-export function normalizeChoice(raw: string, catalog: Skill[]): string | null {
-  const lower = raw.trim().toLowerCase();
+export function normalizeChoice(
+  rawModelResponse: string,
+  catalog: Skill[],
+): string | null {
+  const normalizedResponse = rawModelResponse.trim().toLowerCase();
 
-  const exact = catalog.find((skill) => skill.name.toLowerCase() === lower);
-  if (exact) return exact.name.toLowerCase();
+  const exactSkillMatch = catalog.find(
+    (skill) => skill.name.toLowerCase() === normalizedResponse,
+  );
 
-  // Le modèle ajoute parfois une phrase autour du nom. On cherche donc le nom
+  if (exactSkillMatch) {
+    return exactSkillMatch.name.toLowerCase();
+  }
+
+  // Le modèle ajoute parfois une phrase autour du nom. On cherche donc chaque nom
   // comme mot entier, en échappant les métacaractères: un skill nommé "c++" ou
   // "node.js" produirait sinon un motif invalide ou trop permissif.
   for (const skill of catalog) {
-    const name = skill.name.toLowerCase();
-    const pattern = new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(name)}(?![a-z0-9])`);
-    if (pattern.test(lower)) return name;
+    const normalizedSkillName = skill.name.toLowerCase();
+    const escapedSkillName = escapeRegExp(normalizedSkillName);
+    const skillNamePattern = new RegExp(
+      `(?:^|[^a-z0-9])${escapedSkillName}(?![a-z0-9])`,
+    );
+
+    const responseContainsSkillName = skillNamePattern.test(normalizedResponse);
+    if (responseContainsSkillName) {
+      return normalizedSkillName;
+    }
   }
 
-  if (lower.includes("none")) return "none";
+  const modelSelectedNoSkill = normalizedResponse.includes("none");
+  if (modelSelectedNoSkill) {
+    return "none";
+  }
+
   return null;
 }
 
